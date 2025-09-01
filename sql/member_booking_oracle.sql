@@ -377,6 +377,7 @@ CREATE OR REPLACE PROCEDURE report_occupancy_summary (
   l_room_nights NUMBER;
   l_type_total_nights NUMBER;
   l_period_days NUMBER := GREATEST(TRUNC(p_end_date) - TRUNC(p_start_date), 0);
+  l_type_room_count NUMBER;
 BEGIN
   IF p_end_date <= p_start_date THEN
     RAISE_APPLICATION_ERROR(-20020, 'Report period end_date must be after start_date.');
@@ -388,6 +389,8 @@ BEGIN
   FOR r_type IN c_types LOOP
     l_type_total_nights := 0;
     DBMS_OUTPUT.PUT_LINE('Room Type: ' || r_type.room_type);
+    -- Precompute number of rooms of this type (avoid scalar subquery in PL/SQL expression)
+    SELECT COUNT(*) INTO l_type_room_count FROM rooms WHERE room_type = r_type.room_type;
 
     FOR r_room IN c_rooms(r_type.room_type) LOOP
       l_room_nights := 0;
@@ -400,8 +403,8 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('  Type total booked nights: ' || l_type_total_nights);
     DBMS_OUTPUT.PUT_LINE('  Type occupancy %: ' ||
-      TO_CHAR(CASE WHEN l_period_days * (SELECT COUNT(*) FROM rooms WHERE room_type = r_type.room_type) = 0 THEN 0
-                   ELSE (l_type_total_nights / (l_period_days * (SELECT COUNT(*) FROM rooms WHERE room_type = r_type.room_type))) * 100 END,
+      TO_CHAR(CASE WHEN l_period_days * l_type_room_count = 0 THEN 0
+                   ELSE (l_type_total_nights / (l_period_days * l_type_room_count)) * 100 END,
               'FM990.00') || '%');
     DBMS_OUTPUT.PUT_LINE('--------------------------------------------------------------------------------');
   END LOOP;
